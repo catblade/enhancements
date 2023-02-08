@@ -242,15 +242,6 @@ specialized use cases and the advancements in the compute vendor ecosystem.
 
 ## Motivation
 
-<!--
-This section is for explicitly listing the motivation, goals, and non-goals of
-this KEP.  Describe why the change is important and the benefits to users. The
-motivation section can optionally provide links to [experience reports] to
-demonstrate the interest in a KEP within the wider Kubernetes community.
-
-[experience reports]: https://github.com/golang/go/wiki/ExperienceReports
--->
-
 Users have varied workloads; the current set of available configurations
 for CPU, memory, and topology remain limited.  Additionally, the number of managers
 becoming internal to the Kubelet continues to increase; we should find a more 
@@ -284,7 +275,10 @@ Users would like to be able to address the following use cases:
   Kubernetes with every policy change. <br>
   Note that current solutions have been cropping up to allow for resource management
   outside the core Kubelet. These solutions require turning off the Kubelet functionality 
-  and overriding current Kubelet allocation. We should provide a path otherwise. Many of these solutions are custom to particular companies. Many are not open source. The community should give a process to allow this functionality in core kubelet at a granular level, same as we have in many systems, such as HPC or telco.
+  and overriding current Kubelet allocation, such as [CPU Pooler](https://github.com/nokia/CPU-Pooler). 
+  We should provide a path otherwise. Many of these solutions are custom to particular companies. 
+  Many are not open source. The community should give a process to allow this functionality in core
+  kubelet at a granular level, same as we have in many systems, such as HPC or telco.
 * Leverage additional parts from the pod spec information which could help make allocation decisions
 without the need to query the k8s controlplane.
 * Be able to do research, with minimum toil, on new policies and resource management strategies
@@ -295,85 +289,69 @@ today and move the complexity into external plugins.
 
 ### Goals
 
-<!--
-List the specific goals of the KEP. What is it trying to achieve? How will we
-know that this has succeeded?
--->
-
 #### Alpha Goals
 
-1.	Provide Initial infrastructure to support CCI Driver Plugins and k8s Deployments requiring CCI Drivers after scheduling
-2.  Provide a feature gate to enable CCI Manager. The feature will require CPU Manager policy set to None.
-3.  Provide a CCI test driver which can demonstrate CCI Driver implementation requirementes and several resource management use-cases for cpu and memory.
-4.  Provide documntation of the CCI Manager and the provided test driver plus illustration of the currenlty covered use-cases.
-5.	Support seamless k8s start.
-6.	CCI Driver results (cpusets and memory affinity) are passed back to kubelet and allocated.
-7.	Handle resource management state for cpu and memory through CCI. 
-8.	Support proper fail mechanisms of Pods if CCI driver is not available - Error message + retry 
-9.	Continue cluster operation if CCI driver is not available
-10.  Podspecs:  Will be able to support current pod specs.  While there may be additional 
+1.  Provide Initial infrastructure to support CCI Driver Plugins and k8s Deployments requiring CCI Drivers after scheduling
+1.  Provide a feature gate to enable CCI Manager. The feature will require CPU Manager policy set to None.
+1.  Provide a CCI test driver which can demonstrate CCI Driver implementation requirementes and several resource management use-cases for cpu and memory.
+1.  Provide documentation of the CCI Manager and the provided test driver plus illustration of the currently covered use-cases, including a sample driver.
+1.  Provide end-to-end tests using the sample driver.
+1.  Support seamless k8s start.
+1.  CCI Driver results (cpusets and memory affinity) are passed back to kubelet and allocated.
+1.  Handle resource management state for cpu and memory through CCI. 
+1.  Support proper fail mechanisms of Pods if CCI driver is not available - Error message + retry 
+1.  Continue cluster operation if CCI driver is not available
+1.  Podspecs:  Will be able to support current pod specs.  While there may be additional 
 extensibility in the future, the current pod specs will still work.
-
+1.  Guarantee that cpu and memory resources managed by CCI are visible for the scheduler to be able to correctly assign nodes.
 
 #### Beta & Post-Beta Goals
 
-1.	Support standard pod deployments not requiring CCI Drivers through CPU & Memory Manager: all QoS types
-2.  Support hint providers for topology manager
-3.  Interoperability with Device Plugins, DRA, et cetera. 
-4.	Identify and provide a minimal in-cluster operational core (from existing CPU Manager, Memory Manager, Topology Manager) either through in-tree libraries or through further KEPs. 
-5.  Replace CCI policy with a component integrated in None and Static CPU Manager policies.
-6.  Gather feedback on the feature through surveys.
-7.	E2E testing including other components.
-8.  Adding support for e2e tests in testgrid.
-9.  Health identification mechanisms and automatic health-repair procedures for CCI Drivers.  
-8.  Optimize on-node resource usage (approaches to avoid waste of resources).
+1.  Support standard pod deployments not requiring CCI Drivers through CPU & Memory Manager: all QoS types
+1.  Support hint providers for topology manager
+1.  Interoperability with Device Plugins, DRA, et cetera. 
+1.  Identify and provide a minimal in-cluster operational core (from existing CPU Manager, Memory Manager, Topology Manager) either through in-tree libraries or through further KEPs. 
+1.  Replace CCI policy with a component integrated in None and Static CPU Manager policies.
+1.  Gather feedback on the feature through surveys.
+1.  E2E testing including any new components, such as memory and topology.
+1.  Adding support for e2e tests in testgrid.
+1.  Health identification mechanisms and automatic health-repair procedures for CCI Drivers.  
+1.  Optimize on-node resource usage (approaches to avoid waste of resources because of fragmentation).
+1.  Consider whether useful to support multiple CCI drivers.
+1.  Consider optimal binpacking of resources (we may optimize resource utilization in Beta).
+1.  Consider scheduler optimizations
 
 
 ### Non-Goals
-
-<!--
-What is out of scope for this KEP? Listing non-goals helps to focus discussion
-and make progress.
--->
 
 * Break any existing use cases for topology manager, memory manager, cpu manager, or 
 device manager.
 * Creating any more latency than there is today for scheduling:  We should be 
 careful not to add any latency into scheduling over what exists today for default behavior.
 * CPU & Memory Management on scheduler side.
-* Optimal binpacking of resources (we will still consider if we can optimize resource utilization in Beta).
+
 
 
 ## Proposal
 
-<!--
-This is where we get down to the specifics of what the proposal actually is.
-This should have enough detail that reviewers can understand exactly what
-you're proposing, but should not include things like API designs or
-implementation. What is the desired outcome and how do we measure success?.
-The "Design Details" section below is for the real
-nitty-gritty.
--->
-
+This proposal contains a path to update the kubelet to support more nuanced
+uses of cpu and memory and further on-node resource management enhancements.
+The proposed Container Compute Interface gives users a way to manage these 
+resources without having to either bypass or hack the kubelet cpu and memory
+controllers. The CCI will allow for seamless integration of new and interesting
+cpu and memory policies; this allows for innovation for better workload performance 
+and sustainability for datacenters.
 
 ### User Stories
 
-<!--
-Detail the things that people will be able to do if this KEP is implemented.
-Include as much detail as possible so that people can understand the "how" of
-the system. The goal here is to make this feel real for users without getting
-bogged down.
--->
-
-
 #### Custom workloads, such as Telco/HPC/AI/ML
 
-Custom workloads often have a desire for a mix of types of cores..  For instance, a workload
+Custom workloads often have a desire for a mix of types of cores. For instance, a workload
 should be able to have some number of static cores and some number of shared cores.
 A node should be able to allow both types of cores, without having to have one setting
-or another, and be able to pull from these pulls accordingly.  Additionally, there is
+or another, and be able to pull from these pulls accordingly. Additionally, there is
 a need to have some high-priority cores for higher performance and other lower-priority
-cores for other less-sensitive parts of a workloads.  In these use cases, the workloads 
+cores for other less-sensitive parts of a workloads. In these use cases, the workloads 
 may also have particular types of NUMA splits required.
 
 #### Power optimization of workloads
@@ -408,26 +386,13 @@ This might be a good place to talk about core concepts and how they relate.
 
 ### Risks and Mitigations
 
-<!--
-What are the risks of this proposal, and how do we mitigate? Think broadly.
-For example, consider both security and how this will impact the larger
-Kubernetes ecosystem.
-
-How will security be reviewed, and by whom?
-
-How will UX be reviewed, and by whom?
-
-Consider including folks who also work outside the SIG or subproject.
--->
+As the feature is stand-alone and behind a feature gate, this should not
+impact standard Kubelet behavior.  In the event someone is using the CCI
+Drivers, the alpha version will default to standard best effort QoS until
+the CCI Driver is deployed.  After deployment, the management will be reliant on
+the CCI Driver implementation.
 
 ## Design Details
-
-<!--
-This section should contain enough information that the specifics of your
-change are understandable. This may include API specs (though not always
-required) or even code snippets. If there's any ambiguity about HOW your
-proposal will be implemented, this is the place to discuss them.
--->
 
 #### Compute Specification Option
 
@@ -557,7 +522,7 @@ following interface to manage resource sets.
 The initial interface of resource management plugins is very simple and consists 
 of three functions:
 
-        +CCIAdmit(Pod, container, cci spec, available resources) : <err, resourceset>
+        +CCIAdmit(Pod, container, cci spec, *available resources) : <err, resourceset>
         +CCIAddContainerResource (Pod, container, cgroup, containerid): <err>
         +CCIRemoveContainerResource (containerid): err
 
@@ -902,15 +867,22 @@ you need any help or guidance.
 
 ### Feature Enablement and Rollback
 
-<!--
-This section must be completed when targeting alpha to a release.
--->
+#### Alpha
+Before having a driver in the system, or if one is not available, we default to
+best effort QoS for incoming pods.
+
+A newly installed CCI Driver becomes responsible to handle incoming pods.  It is 
+responsible for reading the state from the kubelet on startup.
+
+#### Beta
+Pods without an available attached CCI Driver we will fail and be retried until
+the driver comes up or failed after a configurable timeout.
 
 #### Operational Requirements for Alpha:
 
-*	Enable CCI Feature Gate
-*	Disable Memory manager 
-*	Disable Topology Manager
+* Enable CCI Feature Gate
+* Disable Memory manager 
+* Disable Topology Manager
 * Set CPU Manager policy to None
 
 
@@ -928,7 +900,7 @@ well as the [existing list] of feature gates.
 
 - [x] Feature gate (also fill in values in `kep.yaml`)
   - Feature gate name: CCIResourceManager
-  - Components depending on the feature gate: CCIResourceManager, CCI CPU Manger Policy, Pod Association Mechaninism, CCI APIs
+  - Components depending on the feature gate: CCIResourceManager, Kubelet
 - [ ] Other
   - Describe the mechanism:
   - Will enabling / disabling the feature require downtime of the control
@@ -957,8 +929,8 @@ NOTE: Also set `disable-supported` to `true` or `false` in `kep.yaml`.
 -->
 
 ###### What happens if we reenable the feature if it was previously rolled back?
-Pods requiring cci driver might have been handled by standard cpu manager, those will need to 
-be recreated after enabling the cci driver.
+
+Running pods should not be impacted.  New pods should be handled by the CCI Driver.
 
 ###### Are there any tests for feature enablement/disablement?
 Planned to include some
@@ -993,7 +965,6 @@ Pods which require CCI Driver will fail starting and report an error due to driv
 unavailability.  If a CCI Plugin fails, Pods which were about to be allocated
 that were tied to the plugin will fail. Based on requirements a fallback mechanism 
 can be implemented where such Pods fallback to a given std. QoS Model.
-
 
 ###### How can a rollout or rollback fail? Can it impact already running workloads?
 Failure of CCI drivers will have impact only over pods requiring CCI driver for 
