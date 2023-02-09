@@ -22,7 +22,7 @@ Container Compute Interface (CCI) Driver Extension
     - [Compute Specification Option](#compute-specification-option)
       - [User API for Alpha: Policy-based resource specification - no scheduler impact](#user-api-for-alpha-policy-based-resource-specification---no-scheduler-impact)
       - [Options for User APIs in Post-Alpha:](#options-for-user-apis-in-post-alpha)
-      - [Resource Manager Architecture](#resource-manager-architecture)
+      - [CCI Resource Manager Architecture](#cci-resource manager-architecture)
       - [Allocation &amp; Container Removal Flow](#allocation--container-removal-flow)
       - [Post-Alpha &amp; GA Architectural Considerations](#post-alpha--ga-architectural-considerations)
   - [Test Plan](#test-plan)
@@ -99,23 +99,23 @@ innovations related to newer CPU architectures is difficult and high cost to com
 This proposal aims to address the challenges by introducing a new Container Compute 
 Interface (CCI). The CCI is conceptually equivalent to the [CSI](https://github.com/kubernetes/design-proposals-archive/blob/main/storage/container-storage-interface.md) in that it will 
 delineate between the responsibility of the Kubelet and the responsibility of lower-level, 
-compute focused plugins for resource assignment capabilities, such as CPU and memory.
+compute focused drivers for resource assignment capabilities, such as CPU and memory.
 
-We propse an iterative implementation approach:
+We propose an iterative implementation approach:
 
-In the first stage (alpha) we propose to add a new component to the kubelet called the CCIManager 
+In the first stage (alpha) we propose adding a new component to the kubelet called the CCIManager 
 that focuses exclusively on providing a mechanism for pluggable CPU management policies (as a replacement
 to the builtin CPUManager and its corresponding policies). Enablement of the CCIManager will be blocked by a feature gate, 
 which, when enabled, will trigger all CPU Management decisions to flow through the CCIManager instead of the builtin CPUManager. 
 As such, the CPUManager policy MUST be set to none if this new feature gate is enabled. This will
 be enforced by the kubelet, causing it to "fail fast" if this invariant does not hold true.
 
-For now, only a single plugin will be allowed to run on a node at any given time. Details of how we plan 
+For now, only a single CCI driver will be allowed to run on a node at any given time. Details of how we plan 
 to enforce this requirement as well as how we plan to (temporarily) handle bootstrapping a node that does not yet have 
 a pluggable CPU Management policy running can be found in Section [Throubleshooting]. In a later phase, we will provide a proper mechanism 
-to handle bootstrapping as well as cases where a plugin becomes temporarily unavailable.
+to handle bootstrapping as well as cases where a CCI driver becomes temporarily unavailable.
 
-The implication of CCI and the addition of the proposed CCI plugin manager 
+The implication of CCI and the addition of the proposed CCI Manager 
 will be to allow compute capabilities such as CPU and memory to be managed outside
 of the Kubelet via pluggable CCI Drivers.  This will allow users to augment the
 current implementation of Kubelet managed resources with support for more complex
@@ -137,7 +137,7 @@ becoming internal to the Kubelet continues to increase; we should find a more
 dynamic and pluggable way of handling these resources.  
 
 Operating systems work by allowing drivers and pluggable resources.  This includes various
-policies in how cpu, memory, and devices are allocated.  Kubernetes can be viewed as being 
+policies in how CPU, memory, and devices are allocated.  Kubernetes can be viewed as being 
 an the operating system of the cloud.  Allowing specialty modules to address the use cases
 directly, rather than continuing to add complexity by continuing to modify the kubelet, 
 will allow the greatest scope of abilities while halting continued increases of complexity 
@@ -181,9 +181,9 @@ today and move the complexity into external drivers.
 #### Alpha Goals
 
 1.  Provide Initial infrastructure to support CCI Drivers and k8s Deployments requiring CCI Drivers.
-1.  Provide a feature gate to enable CCI Manager. The feature will require CPU Manager policy set to None.
+1.  Provide a feature gate to enable CCI Resource Manager. The feature will require CPU Manager policy set to None.
 1.  Provide a CCI test driver which can demonstrate CCI Driver implementation requirementes and several resource management use-cases for cpu.
-1.  Provide documentation of the CCI Manager and the provided test driver plus illustration of the currently covered use-cases, including a sample driver.
+1.  Provide documentation of the CCI Resource Manager and the provided test driver plus illustration of the currently covered use-cases, including a sample driver.
 1.  Provide end-to-end tests using the sample driver.
 1.  Support seamless k8s start.
 1.  CCI Driver results (cpusets) are passed back to kubelet and allocated.
@@ -226,9 +226,9 @@ careful not to add any latency into scheduling over what exists today for defaul
 This proposal contains a path to update the kubelet to support more nuanced
 uses of cpu and memory and further on-node resource management enhancements.
 The proposed Container Compute Interface gives users a way to manage these 
-resources without having to either bypass or hack the kubelet cpu and memory
+resources without having to either bypass or hack the kubelet CPU and memory
 controllers. The CCI will allow for seamless integration of new and interesting
-cpu and memory policies; this allows for innovation for better workload performance 
+CPU and memory policies; this allows for innovation for better workload performance 
 and sustainability for datacenters.
 
 ### User Stories
@@ -442,24 +442,24 @@ Pros:
 
 Cons:
   * Needs a solution for resource quotas (possibly through additional resource specificationin pod spec)
-  * Requires Controller which can deal with cpu and memory resources
+  * Requires Controller which can deal with CPU and memory resources
   * Scalability 
 
-##### Resource Manager Architecture
+##### CCI Resource Manager Architecture
 
 The extension consists of an optional CCI driver inside Pod spec which
 indicates if a CCI driver exists, then it shall process compute resources.
 The association betweed pod and CCI Driver can be also realised as a resource class 
 argument (will be considered as an option during the implementation). 
 
-In the alpha version of the Resource Manager applies drivers to manage resource
+In the alpha version of the CCI Resource Manager applies drivers to manage resource
 allocations for Pods. Post-alpha we will consider if we need to explicitly mark which pods are to be handled by an allocation 
-driver.  The overall architecture consists of a manager component – the Resource
+driver.  The overall architecture consists of a single CCI Resource Manager component – the CCI Resource
 Manager inside the container manager, an optional Pod spec argument to identify which 
 Pods to be processed by the manager(post-alpha), a compute resource store – a component used to store
-the resource sets(cpusets, memory affinity configuration) for the resource drivers. The CCI Manager 
+the resource sets(cpusets, memory affinity configuration) for the resource drivers. The CCI Resource Manager 
 is enabled via a feature gate. After turning on the feature gate all pod allocation requets for cpu 
-and memory will be handled by the CCI Manager.
+and memory will be handled by the CCI Resource Manager.
 
 ![image](CCIArchAlpha.jpg)<br>
 Figure 1: CCI Resource Manager Architecture inside Kubelet
@@ -491,8 +491,8 @@ and removeContainer lifetime events (drivers have to implement Admit, AddResourc
 and RemoveResource handlers accordingly). 
 
 2. CCI Resource Store<br>
-The Resource Manager uses a store to keep track of resourcesets which can include 
-cpusets, memory, etc ..  allocated by CCI Drivers. This information is gathered 
+The CCI Resource Manager uses a store to keep track of resourcesets which can include 
+cpusets and memory allocated by CCI Drivers. This information is gathered 
 per container. The gathered information will be used to provide data for on-node available resources. The store offers the 
 following interface to manage resource sets.
 
@@ -528,7 +528,7 @@ error if the operation failed on the driver side.
     CCIDriver is a grpc service interface for CCI resource kubelet drivers.
     The interface provides admission, allocation and cleanup entrypoints.
     Drivers are registered  as kubelet plugins and will be called by the 
-    CCI resource manager for pods which are associated with this driver.
+    CCI Resource Manager for pods which are associated with this driver.
     */
     service CCIDriver {
       //cciAdmit admission function to reserve resources for a given container
@@ -640,10 +640,10 @@ After the initial alpha implementation we will consider the integration of the
 Container Compute Interface “CCI” with exisiting CPU and Memory manager stack
 This can be achieved either by using already existing managers and introducing state 
 synchronization or through a common code base which can be invoked 
-from within the CCI Manager.
+from within the CCI Resource Manager.
 
 A possible integation with topology manager could follow by implementing the topology hints 
-interface for the CCI Manager which will use data extracted from CCI Store. This will 
+interface for the CCI Resource Manager which will use data extracted from CCI Store. This will 
 require such data to be provided by CCI Drivers and the CCI store has to be extended to 
 be able to handle it correctly for serving the corresponding topology hints calls.
 
@@ -671,24 +671,32 @@ to implement this enhancement.
 
 
 ##### Integration tests
+
 ###### Alpha
-* CCI Manager Integration test for cpu use-cases: driver-based allocation and best-effort QoS 
+
+* CCI Resource Manager Integration test for cpu use-cases: driver-based allocation and best-effort QoS 
 * CCI State Consistency integrateion test
 * Kubelet restart integration test
 * System-reserved resources test
+
+
 ###### BETA
+
 * CPU Manager None, Static Policy Integration with CCI
-* CPU, Memory, Topology and CCI Manager Integration test
+* CPU, Memory, Topology and CCI Resource Manager Integration test
 *	Further integration tests with Device Manager and DRA
 *	Integration test including static QoS and driver-based allocation
 
 ##### e2e tests
+
 ###### Alpha
+
 *	E2E tests including a test CCI Driver
 * E2E tests for showcasing resource allocations for cpu through CCI
 
 ###### BETA
-*	End-to-End tests to cover all cci resource allocation use-cases
+
+* End-to-End tests to cover all cci resource allocation use-cases
 * End-to_End tests with device plugins and DRA
 * Performance and resource utilization tests
 
@@ -700,20 +708,20 @@ to implement this enhancement.
 - Feature implemented behind a feature flag
 - Initial e2e tests completed and enabled
 - Integrate API feedback from users and community
--	Proven cross-components consistency (ideally via tests)
--	Handling of topology manager and memory manager use-cases
--	Finish Identified Code refactoring of common building blocks (look at common pieces in all plugin-frameworks  in kubelet) 
--	Look to what makes sense to leave inside Kubelet due to latency and use case requirements. Introduce community CCI drivers repo
+- Proven cross-components consistency (ideally via tests)
+- Handling of topology manager and memory manager use-cases
+- Finish Identified Code refactoring of common building blocks (look at common pieces in all plugin-frameworks  in kubelet) 
+- Look to what makes sense to leave inside Kubelet due to latency and use case requirements. Introduce community CCI drivers repo
 Similar to Kubernetes Scheduler Plugin repo
--	Have CCI Drivers specific to common use cases or environments
--	Smooth integration with scheduler extensions/ plugins …
+- Have CCI Drivers specific to common use cases or environments
+- Smooth integration with scheduler extensions/ plugins …
 
 #### Beta to GA
 
 - Gather feedback from developers and surveys and integrate it
--	Successful adoption across users
--	Proven Components Correctness
--	Performance tests completion
+- Successful adoption across users
+- Proven Components Correctness
+- Performance tests completion
 - N examples of real-world usage
 
 #### Deprecation
@@ -905,7 +913,7 @@ Further performance benchmarks will be done in Beta Phase
 ###### Will enabling / using this feature result in any new API calls?
 
 For Pods requiring CCI Driver the admission, container add and container removal operations will be handled via 
-api call to external CCI Driver. Remaining pods should be handled as before.
+API call to external CCI Driver. Remaining pods should be handled as before.
 
 ###### Will enabling / using this feature result in introducing new API types?
 
@@ -931,7 +939,7 @@ No
   
 In alpha phase we propose to handle bootstrapping and failures due unavailable drivers 
 by going back to best-effort QoS. In post-alpha phase we will consider solutions of the bootstrapping and driver failure problem
-though an association mechanism between pods and drivers. If a pod does not require a driver CCI Manager can 
+though an association mechanism between pods and drivers. If a pod does not require a driver CCI Resource Manager can 
 provide allocation for this pod without and driver invocations, which will allow a smooth bootstrapping procedure of the cluster.
 
 If a CCI Driver fails, Pods associated with a driver which were about to be allocated will fail. Based on 
@@ -986,16 +994,16 @@ TBD in Beta.
   complexity within the Kubelet over time.
 
   One example how current managers could be lavareged for that can be seen in the [CPU Pooler](https://github.com/nokia/CPU-Pooler) 
-  project where a device plugin is used to handle cpu and memory management. In contrast 
+  project where a device plugin is used to handle CPU and memory management. In contrast 
   to this work our CCI approach concentrates on CPU and memory and will not require to do initial reservation of system resources to handle user applications. 
   The realisation of CCI is clearly separated from other components and will enable a functional and seamless integration with other device plugins and DRA plugins. 
-  In later phase of CCI development will consider handling cpu and memory resources also for pods
+  In later phase of CCI development will consider handling CPU and memory resources also for pods
   not requiring drivers to run, by leveraging existing code base (post-alpha goal - 
   it can also include refactoring of existing code base). Further, CCI approach will cover required interfaces 
-  to identify available cpu and memory resource so that correct scheduling can be performed. 
+  to identify available CPU and memory resource so that correct scheduling can be performed. 
    
 ## Infrastructure Needed 
   
 We may choose to add in a repo that allows donations of drivers specific to particular
-use cases, in the way that we already do so for Kubernetes scheduler Plugins.  This 
+use cases, similar to the repo currently available for Kubernetes scheduler Plugins.  This 
 will allow a central place for the community to donate useful content.
